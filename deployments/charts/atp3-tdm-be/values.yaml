@@ -4,7 +4,7 @@ DOCKER_TAG: ""
 SERVICE_TYPE: "ATP3"
 SWAGGER_ENABLED: "false"
 CONTENT_SECURITY_POLICY: "*"
-SPRING_PROFILES: "disable-security"
+ACTIVE_PROFILES_SPRING: "disable-security"
 SERVICE_NAME: "atp3-tdm-be"
 SERVICE_PORT_TYPE: "ClusterIP"
 # Logging
