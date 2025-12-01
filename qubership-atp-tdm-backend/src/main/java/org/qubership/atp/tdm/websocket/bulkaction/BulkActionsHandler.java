@@ -69,13 +69,13 @@ public abstract class BulkActionsHandler extends TextWebSocketHandler {
     protected final TdmMdcHelper mdcHelper;
     private final ExecutorService executorService;
     private final AbstractBulkActionMailSender mailSender;
+
     @Value("${atp.lock.bulk.action.duration.sec}")
     private int bulkActionDuration;
 
     /**
      * Constructor with parameters.
      */
-
     public BulkActionsHandler(@Qualifier("websocket") ExecutorService executorService,
                               @Nonnull CatalogRepository catalogRepository,
                               @Nonnull EnvironmentsService environmentsService,
@@ -127,7 +127,7 @@ public abstract class BulkActionsHandler extends TextWebSocketHandler {
         log.info("Websocket request processing started. Session: [{}]. TextMessage: [{}].", session, message);
         BulkActionConfig config = parseRequest(message);
         log.info("class name : {}", this.getClass().getName());
-        lockManager.executeWithLock(session.getUri().toString() + " " + config.getProjectId(),
+        lockManager.executeWithLock(session.getUri().getPath() + " " + config.getProjectId(),
                 bulkActionDuration, () -> {
                     MDC.clear();
                     MdcUtils.put(MdcField.PROJECT_ID.toString(), config.getProjectId());

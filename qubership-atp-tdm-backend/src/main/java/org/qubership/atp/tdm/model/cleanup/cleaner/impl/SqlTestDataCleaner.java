@@ -31,6 +31,9 @@ import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
 import org.owasp.esapi.Encoder;
 import org.owasp.esapi.codecs.OracleCodec;
 import org.owasp.esapi.reference.DefaultEncoder;
@@ -41,11 +44,10 @@ import org.qubership.atp.tdm.model.table.TestDataTable;
 import org.qubership.atp.tdm.utils.TestDataUtils;
 import org.slf4j.MDC;
 
-import jakarta.annotation.Nonnull;
-import jakarta.annotation.Nullable;
 import liquibase.repackaged.net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import liquibase.repackaged.net.sf.jsqlparser.statement.Statement;
 import liquibase.repackaged.net.sf.jsqlparser.statement.select.Select;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -59,6 +61,7 @@ public class SqlTestDataCleaner implements TestDataCleaner {
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private int queryTimeout;
     private final Connection connection;
+    @Getter
     private String query;
 
     private final Encoder esapiEncoder = DefaultEncoder.getInstance();
@@ -76,51 +79,36 @@ public class SqlTestDataCleaner implements TestDataCleaner {
     @Override
     @Nonnull
     public List<Map<String, Object>> runCleanup(@Nonnull TestDataTable testDataTable) throws Exception {
-        Matcher m = COLUMN_PATTERN.matcher(query);
-        List<String> columns = new ArrayList<>();
-        String target;
-        String column;
-        int index;
+        List<String> columns = collectParameterColumnsList(testDataTable);
 
-        log.info("Original cleanup query: {}", query);
-        // catch and replace column placeholders to build a PreparedStatement
-        while (m.find()) {
-            target = m.group();
-            column = m.group(1);
-            validateIdentifier(column);
-            index = TestDataUtils.getIndexHeaderColumnByName(testDataTable, column);
-            if (index < 0) {
-                throw new IllegalArgumentException("Column '" + column + "' doesn't exist");
-            }
+        /*
+            All column placeholders are replaced with '?' character, and columns list is populated.
+            Let's parse the resulting query.
+         */
+        parseQuery();
 
-            query = query.replace(target, "?").trim().toUpperCase(Locale.ROOT);
-
-            Statement statement = CCJSqlParserUtil.parse(query);
-
-            if (statement instanceof Select) {
-                log.debug("This is a SELECT query.");
-            } else {
-                throw new SecurityException("Only SELECT statements are allowed!");
-            }
-            if (query.contains(";") || query.contains("--") || query.contains("/*")) {
-                throw new SecurityException("Potentially dangerous SQL syntax");
-            }
-
-            String sanitizedColumnName = esapiEncoder.encodeForSQL(oracleCodec, column);
-            columns.add(sanitizedColumnName);
-        }
-
+        /*
+            Check rows existence in the testDataTable.
+            This checking could be the 1st in the method,
+            but... let's leave it here, to perform query parsing in any case.
+         */
         List<Map<String, Object>> rows = testDataTable.getData();
         if (rows.isEmpty()) {
             log.warn("Table body has no rows");
             return new ArrayList<>();
         }
 
+        /*
+            Prepare statement and execute it in the loop through all rows of testDataTable.
+            As a result, collect rows-to-be-deleted into rowsToBeDeleted list.
+            TODO: Should be re-analyzed, because it can be very resource-consuming in case wide target table.
+         */
         List<Map<String, Object>> rowsToBeDeleted = new ArrayList<>();
         try (PreparedStatement preparedStatement = connection.prepareStatement(query)) {
             log.info("Cleanup query: {}", query);
             for (Map<String, Object> row : rows) {
-                log.debug("Processing row #{}", row.get("ROW_ID"));
+                Object rowId = row.get("ROW_ID");
+                log.debug("Processing row #{}", rowId);
                 for (int i = 0; i < columns.size(); i++) {
                     String columnName = columns.get(i);
                     preparedStatement.setString(i + 1,
@@ -133,10 +121,10 @@ public class SqlTestDataCleaner implements TestDataCleaner {
                         })
                         .get(queryTimeout, TimeUnit.SECONDS)) {
                     if (!rs.next()) {
-                        log.debug("Row with id: {} will be marked for deleting", row.get("ROW_ID"));
+                        log.debug("Row with id: {} will be marked for deleting", rowId);
                         rowsToBeDeleted.add(row);
                     } else {
-                        log.debug("Row with id: {} will be skipped", row.get("ROW_ID"));
+                        log.debug("Row with id: {} will be skipped", rowId);
                     }
                 } catch (TimeoutException e) {
                     throw new TimeoutException("SQL execution has been stopped as maximum time of execution in "
@@ -144,13 +132,54 @@ public class SqlTestDataCleaner implements TestDataCleaner {
                 } catch (SQLSyntaxErrorException e) {
                     throw new SQLSyntaxErrorException("Incorrect SQL syntax.", e);
                 } catch (Exception e) {
-                    log.error(String.format(TdmDeleteRowException.DEFAULT_MESSAGE,
-                            row.get("ROW_ID"), testDataTable.getName()), e);
-                    throw new TdmDeleteRowException(row.get("ROW_ID").toString(), testDataTable.getName());
+                    log.error(String.format(TdmDeleteRowException.DEFAULT_MESSAGE, rowId, testDataTable.getName()), e);
+                    throw new TdmDeleteRowException(rowId.toString(), testDataTable.getName());
                 }
             }
             return rowsToBeDeleted;
         }
+    }
+
+    public List<String> collectParameterColumnsList(@Nonnull TestDataTable testDataTable) {
+        log.info("Original cleanup query: {}", query);
+        Matcher m = COLUMN_PATTERN.matcher(query);
+        List<String> columns = new ArrayList<>();
+        String target;
+        String column;
+        int index;
+
+        /*
+            catch and replace column placeholders to build a PreparedStatement
+         */
+        while (m.find()) {
+            target = m.group();
+            column = m.group(1);
+            validateIdentifier(column);
+            index = TestDataUtils.getIndexHeaderColumnByName(testDataTable, column);
+            if (index < 0) {
+                throw new IllegalArgumentException("Column '" + column + "' doesn't exist");
+            }
+
+            query = query.replace(target, "?").trim();
+            log.debug("Formatted cleanup query: {}", query);
+
+            String sanitizedColumnName = esapiEncoder.encodeForSQL(oracleCodec, column);
+            columns.add(sanitizedColumnName);
+        }
+        return columns;
+    }
+
+    public boolean parseQuery() {
+        Statement statement = CCJSqlParserUtil.parse(query.trim().toUpperCase(Locale.ROOT));
+        if (statement instanceof Select) {
+            log.debug("This is a SELECT query.");
+        } else {
+            throw new SecurityException("Only SELECT statements are allowed!");
+        }
+        if (query.contains(";") || query.contains("--") || query.contains("/*")) {
+            throw new SecurityException("Potentially dangerous SQL syntax");
+        }
+        return true;
     }
 
     private void validateIdentifier(String input) {

@@ -55,7 +55,7 @@ public class DataRefreshController /* implements DataRefreshControllerApi */ {
      * Get refresh configuration for specified dataset / table ID.
      *
      * @param id - refresh config id
-     * @return refresh configuration object
+     * @return refresh configuration object.
      */
     @Operation(description = "Get refresh configuration for specified dataset / table ID.")
     @PreAuthorize("@entityAccess.checkAccess("
@@ -63,13 +63,19 @@ public class DataRefreshController /* implements DataRefreshControllerApi */ {
             + "@catalogRepository.findByRefreshConfigId(#id).getProjectId(), 'READ')")
     @AuditAction(auditAction = "Get refresh configuration by id {{#id}}")
     @GetMapping(path = {"/config/{id}"})
-    public ResponseEntity<TestDataRefreshConfig> getRefreshConfig(@PathVariable UUID id) {
+    public ResponseEntity<TestDataRefreshConfig> getRefreshConfig(@PathVariable("id") UUID id) {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON)
                 .body(dataRefreshService.getRefreshConfig(id));
     }
 
     /**
      * Save / update data refresh settings.
+     *
+     * @param tableName Name of table
+     * @param queryTimeout Query timeout value in seconds
+     * @param refreshConfig TestDataRefreshConfig object
+     * @return TestDataRefreshConfig object after saving
+     * @throws Exception in case errors while config saving.
      */
     @Operation(description = "Save / update data refresh settings.")
     @PreAuthorize("@entityAccess.checkAccess("
@@ -85,6 +91,12 @@ public class DataRefreshController /* implements DataRefreshControllerApi */ {
 
     /**
      * Force run data refresh.
+     *
+     * @param tableName Name of table
+     * @param queryTimeout Query timeout value in seconds
+     * @param allEnv Flag if the action should be applied to all environments (true) or not
+     * @return List of RefreshResults after refresh running
+     * @throws Exception in case errors while refresh running.
      */
     @Operation(description = "Force run data refresh.")
     @PreAuthorize("@entityAccess.checkAccess("
@@ -103,7 +115,7 @@ public class DataRefreshController /* implements DataRefreshControllerApi */ {
      *
      * @param cronExpression cron expression to calculate next run based on
      * @return ResponseMessage that contains the details
-     * @throws ParseException Thrown in case if invalid cron expression was provided
+     * @throws ParseException Thrown in case if invalid cron expression was provided.
      */
     @Operation(description = "Get next run's date / time details.")
     @AuditAction(auditAction = "Get next run's date. cron {{#cronExpression}}")
