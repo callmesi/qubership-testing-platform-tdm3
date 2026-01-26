@@ -37,6 +37,7 @@
         <kotlin-stdlib.version>1.8.22</kotlin-stdlib.version>
         <commons-fileupload.version>1.6.0</commons-fileupload.version>
         <org.bouncycastle.jdk18on.version>1.78.1</org.bouncycastle.jdk18on.version>
+        <undertow.version>2.3.21.Final</undertow.version>
 
         <atp.crypt.version>0.0.23</atp.crypt.version>
         <atp.integration.spring.boot.starter.version>0.2.41</atp.integration.spring.boot.starter.version>
@@ -100,18 +101,18 @@
             <dependency>
                 <groupId>io.undertow</groupId>
                 <artifactId>undertow-core</artifactId>
-                <version>2.2.38.Final</version>
-            </dependency>
-            <!--<dependency>
-                <groupId>io.projectreactor.netty</groupId>
-                <artifactId>reactor-netty-core</artifactId>
-                <version>${reactor-netty.version}</version>
+                <version>${undertow.version}</version>
             </dependency>
             <dependency>
-                <groupId>io.projectreactor.netty</groupId>
-                <artifactId>reactor-netty-http</artifactId>
-                <version>${reactor-netty.version}</version>
-            </dependency>-->
+                <groupId>io.undertow</groupId>
+                <artifactId>undertow-servlet</artifactId>
+                <version>${undertow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.undertow</groupId>
+                <artifactId>undertow-websockets-jsr</artifactId>
+                <version>${undertow.version}</version>
+            </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-handler</artifactId>
